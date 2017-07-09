@@ -5,9 +5,12 @@
 #include <readline/readline.h>
 #include <stdlib.h>
 #include <sqlite3.h>
+#include <pcre.h>
 
 enum action {
-    CREATE
+    CREATE,
+    SHOW,
+    NOOP
 };
 
 struct Entry {
@@ -72,9 +75,54 @@ void write_to_db(sqlite3 *db, struct Entry entry) {
     sqlite3_free(sql);
 }
 
-//TODO: Analyze, validate and dispatch input.
+void store_new_entry(sqlite3 *db, char *valid_input) {
+    struct Entry entry = create_entry(valid_input);
+    if (entry.end > entry.start) {
+        write_to_db(db, entry);
+    } else {
+        puts("End must be after start.");
+    }
+    free_entry(entry);
+}
+
+int print_db_result(void *data, int argc, char **argv, char **col_name) {
+    for (int i = 0; i < argc; i++) {
+        printf("%s\t\t", argv[i] ? argv[i] : "NULL");
+    }
+    printf("\n");
+    return 0;
+}
+
+void show_last_entries(sqlite3 *db, int n) {
+    puts("Start\t\tEnd\t\tActivity\t\tComment");
+
+    char *db_error = NULL;
+    char *sql = sqlite3_mprintf("SELECT datetime(start, 'unixepoch'), datetime(end, 'unixepoch'), " \
+                                "activity, comment FROM zeit ORDER BY start DESC LIMIT %i", n);
+
+    int db_result = sqlite3_exec(db, sql, print_db_result, NULL, &db_error);
+    if (db_result != SQLITE_OK) {
+        fprintf(stderr, "Error: %s\n", db_error);
+        sqlite3_free(db_error);
+    }
+}
+
 enum action analyze_input(char *input) {
-    return CREATE;
+    char *regex = "\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2};\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2};.+;.*";
+    const char *error;
+    int erroffset;
+    pcre *re = pcre_compile(regex, 0, &error, &erroffset, 0);
+    int rc;
+    int ovector[5000];
+    rc = pcre_exec(re, 0, input, (int)strlen(input), 0, 0, ovector, 5000);
+
+    if (rc == 1) {
+        return CREATE;
+    } else if (strcmp(input, "show") == 0) {
+        return SHOW;
+    } else {
+        return NOOP;
+    }
 }
 
 int main(int argc, char **argv) {
@@ -90,12 +138,16 @@ int main(int argc, char **argv) {
         if (input == NULL) { break; }
         add_history(input);
         enum action action = analyze_input(input);
-        if (action == CREATE) {
-            struct Entry entry = create_entry(input);
-            write_to_db(db, entry);
-            free_entry(entry);
-        } else {
-            puts("Unknown action.");
+        switch (action) {
+            case CREATE:
+                store_new_entry(db, input);
+                break;
+            case SHOW:
+                show_last_entries(db, 10);
+                break;
+            case NOOP:
+                puts("Invalid syntax.");
+                break;
         }
         free(input);
     }
