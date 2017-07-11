@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sqlite3.h>
 #include <pcre.h>
+#include <sys/stat.h>
 
 enum action {
     CREATE,
@@ -125,13 +126,64 @@ enum action analyze_input(char *input) {
     }
 }
 
-int main(int argc, char **argv) {
+sqlite3 *open_db(char *db_path) {
     sqlite3 *db;
-    int rc = sqlite3_open("/home/jens/Code/C/zeit/zeit.db", &db); //TODO: Make path configurable
-    if (rc) {
-        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+
+    int open_result = sqlite3_open(db_path, &db);
+
+    if (open_result != 0) {
+        fprintf(stderr, "Cannot open the database: '%s'\n", sqlite3_errmsg(db));
+        return NULL;
+    }
+
+    return db;
+}
+
+int create_table(sqlite3 *db) {
+    char *sql = "CREATE TABLE IF NOT EXISTS zeit (start INTEGER NOT NULL UNIQUE, " \
+                "end INTEGER NOT NULL UNIQUE, activity TEXT NOT NULL, comment TEXT)";
+
+    char *db_error;
+    int execution_result = sqlite3_exec(db, sql, NULL, NULL, &db_error);
+
+    if (execution_result != 0) {
+        fprintf(stderr, "Error creating the table: '%s'\n", db_error);
         return 1;
     }
+
+    return 0;
+}
+
+sqlite3 *init_db() {
+    char *home = getenv("HOME");
+    char *data_folder = "/.zeit/";
+    char *db_file = "zeit.db";
+
+    char *folder = malloc((strlen(home) + strlen(data_folder) + 1) * sizeof(char));
+    strcat(folder, home);
+    strcat(folder, data_folder);
+
+    char *db_path = malloc((strlen(folder) + strlen(db_file) + 1) * sizeof(char));
+    strcat(db_path, folder);
+    strcat(db_path, db_file);
+
+    struct stat dummy = {0};
+    if (stat(folder, &dummy) == -1) {
+        mkdir(folder, 0700);
+    }
+
+    sqlite3 *db = open_db(db_path);
+
+    if (create_table(db) != 0) {
+        return NULL;
+    }
+
+    return db;
+}
+
+int main(int argc, char **argv) {
+    sqlite3 *db = init_db();
+    if (db == NULL) {return 1;}
 
     while (1) {
         char *input = readline("Input: ");
