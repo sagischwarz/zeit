@@ -63,5 +63,4 @@ compile_commands.json
 CTestTestfile.cmake
 
 .idea
-
-zeit.db*
+cmake-build-debug
