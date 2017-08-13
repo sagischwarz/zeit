@@ -64,3 +64,6 @@ CTestTestfile.cmake
 
 .idea
 cmake-build-debug
+
+bin
+.vscode
