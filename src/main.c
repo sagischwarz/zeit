@@ -96,11 +96,11 @@ int print_db(int argc, char **argv, char *sep) {
 }
 
 int print_db_result(void *data, int argc, char **argv, char **col_name) {
-    print_db(argc, argv, "\t\t");
+    return print_db(argc, argv, "\t\t");
 }
 
 int export_db_result(void *data, int argc, char **argv, char **col_name) {
-    print_db(argc, argv, ",");
+    return print_db(argc, argv, ",");
 }
 
 
